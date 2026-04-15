@@ -1,0 +1,46 @@
+[
+  {
+    "id": "q_refund_window",
+    "question": "Khách hàng có bao nhiêu ngày để yêu cầu hoàn tiền kể từ khi xác nhận đơn?",
+    "must_contain_any": ["7 ngày", "7 ngày làm việc"],
+    "must_not_contain": ["14 ngày làm việc"],
+    "expect_top1_doc_id": "policy_refund_v4",
+    "grading_criteria": ["contains_7_day_window", "no_stale_14_day", "top1_is_refund_policy"],
+    "note": "Core test: stale refund window must be cleaned"
+  },
+  {
+    "id": "q_p1_sla",
+    "question": "SLA phản hồi đầu tiên cho ticket P1 là bao lâu?",
+    "must_contain_any": ["15 phút"],
+    "must_not_contain": [],
+    "expect_top1_doc_id": "sla_p1_2026",
+    "grading_criteria": ["contains_15min_sla", "top1_is_sla_doc"],
+    "note": "SLA chunk from sla_p1_2026"
+  },
+  {
+    "id": "q_lockout",
+    "question": "Bao nhiêu lần đăng nhập sai thì tài khoản bị khóa?",
+    "must_contain_any": ["5 lần"],
+    "must_not_contain": [],
+    "expect_top1_doc_id": "it_helpdesk_faq",
+    "grading_criteria": ["contains_5_attempts", "top1_is_helpdesk"],
+    "note": "IT helpdesk FAQ lockout policy"
+  },
+  {
+    "id": "q_leave_version",
+    "question": "Theo chính sách nghỉ phép hiện hành (2026), nhân viên dưới 3 năm kinh nghiệm được bao nhiêu ngày phép năm?",
+    "must_contain_any": ["12 ngày", "12 ngày phép năm"],
+    "must_not_contain": ["10 ngày phép năm"],
+    "expect_top1_doc_id": "hr_leave_policy",
+    "grading_criteria": ["contains_12_day_leave", "no_stale_10_day", "top1_is_hr_policy", "version_2026"],
+    "note": "Must filter stale HR (10 days); top-1 should be hr_leave_policy 2026 version"
+  },
+  {
+    "id": "q_access_control",
+    "question": "Quy trình xử lý khi phát hiện truy cập trái phép vào hệ thống là gì?",
+    "must_contain_any": ["báo cáo", "khóa tài khoản", "incident"],
+    "must_not_contain": [],
+    "grading_criteria": ["contains_incident_procedure"],
+    "note": "Access control SOP - bonus grading question"
+  }
+]
