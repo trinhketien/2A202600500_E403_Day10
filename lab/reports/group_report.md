@@ -1,88 +1,147 @@
 # Báo Cáo Nhóm — Lab Day 10: Data Pipeline & Data Observability
 
-**Tên nhóm:** Nhóm Antigravity (Demo Group)  
+**Tên nhóm:** Nhóm Antigravity  
 **Thành viên:**
 | Tên | Vai trò (Day 10) | Email |
 |-----|------------------|-------|
-| Trịnh Kế Tiến | Chạy Pipeline End-to-end + Leader | trinhketien@email.com |
-| Member 2 | Thêm 3 Rule Mới (Cleaning Rules) | m2@example.com |
-| Member 3 | Viết 2 Expectations (Data Quality) | m3@example.com |
-| Member 4 | Inject Corruption & Eval | m4@example.com |
-| Member 5 | Freshness Check & Báo cáo | m5@example.com |
+| Trịnh Kế Tiến | Pipeline End-to-end + Leader | trinhketiennic@email.com |
+| Thành viên 2 | Cleaning Rules (R7–R9) | member2@example.com |
+| Thành viên 3 | Expectations (E7–E8) + Quality | member3@example.com |
+| Thành viên 4 | Inject Corruption + Eval Retrieval | member4@example.com |
+| Thành viên 5 | Freshness Check + Docs + Báo cáo | member5@example.com |
 
 **Ngày nộp:** 15/04/2026  
+**Repo:** https://github.com/trinhketien/2A202600500_E403_Day10  
 **Độ dài khuyến nghị:** 600–1000 từ
 
 ---
 
-## 1. Pipeline tổng quan
+> **Nộp tại:** `reports/group_report.md`  
+> Phải có **run_id**, **đường dẫn artifact**, và **bằng chứng before/after** (CSV eval hoặc screenshot).
+
+---
+
+## 1. Pipeline tổng quan (150–200 từ)
 
 **Tóm tắt luồng:**
-Pipeline xuất phát từ file export raw dạng CSV chứa các snippet tài liệu chính sách công ty (Refund Policy, IT Helpdesk, HR leave). Dữ liệu này được đưa qua hàm `clean_rows` để chuẩn hóa (ngày tháng, lọc rác thẻ BOM, loại câu quá ngắn, quy đổi cửa sổ hoàn tiền 14 ngày thành 7 ngày cho hợp version v4). Sau đó, dữ liệu sạch được nạp qua module **Great Expectations siêu nhẹ** (`run_expectations`) để có cơ chế báo động (WARN) và ngắt (HALT) nếu vi phạm nghiêm trọng (ví dụ: mất ID, sai format ngày ISO). Cuối cùng mới được nhúng (embed) vào **ChromaDB** dùng làm Knowledge Base cho các Agent ngày 09, và nhả ra một file `manifest.json` ghi nhận metadata cho Freshness Check.
 
-**Lệnh chạy một dòng (End-to-End Baseline Sprint 1):**
+Pipeline ETL xử lý file export raw dạng CSV (`data/raw/policy_export_dirty.csv`) chứa 10 bản ghi chính sách công ty (Refund Policy v4, SLA P1 2026, IT Helpdesk FAQ, HR Leave Policy). Luồng xử lý end-to-end gồm 4 bước:
+
+1. **Ingest**: Đọc CSV raw qua `load_raw_csv()` — thu được 10 raw records.
+2. **Clean**: Hàm `clean_rows()` áp dụng 9 quy tắc (6 baseline + 3 mới R7–R9) để chuẩn hóa ngày ISO, loại doc_id lạ, fix refund 14→7 ngày, strip BOM, chặn chunk ngắn, reject thiếu exported_at. Kết quả: **6 cleaned + 4 quarantine**.
+3. **Validate**: Module `run_expectations()` chạy 8 expectations (6 baseline + 2 mới E7–E8). Nếu có halt → pipeline dừng, không embed dữ liệu lỗi.
+4. **Embed**: Upsert 6 chunks sạch vào ChromaDB collection `day10_kb` dùng model `all-MiniLM-L6-v2`. Strategy idempotent: upsert theo `chunk_id` + prune vector cũ không còn trong batch.
+
+`run_id` được ghi trong mọi log và manifest JSON tại `artifacts/manifests/`.
+
+**Lệnh chạy một dòng:**
+
 ```bash
-python etl_pipeline.py run --run-id sprint1-clean
+python etl_pipeline.py run --run-id sprint4-final
 ```
 
 ---
 
-## 2. Cleaning & expectation
+## 2. Cleaning & expectation (150–200 từ)
 
-Nhóm đã thêm **3 rule mới (R7, R8, R9)** và **2 expectation mới (E7, E8)** vào baseline có sẵn để bắt lỗi các dữ liệu cực đoan từ data export.
+Baseline đã có 6 rule (allowlist doc_id, normalize effective_date, HR stale <2026, missing chunk_text, dedupe, refund 14→7). Nhóm thêm **3 rule mới** + **2 expectation mới**:
 
-### 2a. Bảng metric_impact
+### 2a. Bảng metric_impact (bắt buộc — chống trivial)
 
-| Rule / Expectation mới (tên ngắn) | Trước (chạy clean) | Khi inject (Sprint 3) | Chứng cứ (log / metric) |
-|-----------------------------------|------------------|-----------------------------|-------------------------------|
-| **R7:** `strip_bom_control_chars` | `quarantine: 4` | Cách ly dữ liệu ẩn ký tự BOM | File pipeline `etl_pipeline.py` |
-| **R8:** `min_chunk_content_length`| `quarantine: 4` | Cách ly khi inject chunk < 20 ký tự | Chạy `clean_rows` loại rác hiệu quả|
-| **R9:** `reject_missing_export_at`| `quarantine: 4` | Bị rớt (quarantine) nếu rỗng \`exported_at\` | Freshness check tránh văng lỗi None |
-| **E7:** `no_bom_in_chunk_text` (HALT)| `OK` (halt) | FAIL (halt) khi rule làm sạch tắt bỏ | Expectation log `E7 -> FAIL` |
-| **E8:** `all_rows_have_export_at` (WARN)| `OK` (warn) | FAIL (warn) khi không có time tracker | Expectation log `E8 -> FAIL` |
+| Rule / Expectation mới | Trước (sprint1-clean) | Sau inject (inject-bad) | Chứng cứ |
+|-------------------------|:-----:|:-----:|------|
+| **R7** `strip_bom_control_chars` | quarantine=4 | Quarantine tăng khi inject BOM | `transform/cleaning_rules.py` L117–L128 |
+| **R8** `min_chunk_content_length(<20)` | quarantine=4 | Quarantine tăng khi inject chunk ngắn | `transform/cleaning_rules.py` L130–L137 |
+| **R9** `reject_missing_exported_at` | quarantine=4 | Quarantine tăng khi exported_at rỗng | `transform/cleaning_rules.py` L139–L143 |
+| **E7** `no_bom_control_in_chunk_text` (halt) | OK | FAIL khi bypass R7 | `quality/expectations.py` L115–L129 |
+| **E8** `all_rows_have_exported_at` (warn) | OK | FAIL khi bypass R9 | `quality/expectations.py` L131–L143 |
+
+**Rule chính (baseline + mở rộng):**
+
+- R1: allowlist doc_id → quarantine unknown_doc_id
+- R2–R3: normalize effective_date ISO + quarantine invalid format
+- R4: HR leave policy effective_date < 2026-01-01 → quarantine stale
+- R5: missing chunk_text → quarantine
+- R6: deduplicate chunk_text
+- R7–R9: BOM strip, min length 20, reject missing exported_at **(MỚI)**
 
 **Ví dụ 1 lần expectation fail và cách xử lý:**
-Khi chạy lệnh inject lỗi (`python etl_pipeline.py run --run-id inject-bad --no-refund-fix --skip-validate`), lỗi chính sách refund 14 ngày đã lọt vào. Log báo `expectation[refund_no_stale_14d_window] FAIL (halt) :: violations=1`. Do ta bật cờ `--skip-validate` (bỏ qua HALT) nên nó vẫn nạp lên vectorDB. Hệ quả là model sinh ra file `eval_bad.csv` chứa `hits_forbidden = yes`. Nếu không bỏ qua, pipeline đã bị block không làm ô nhiễm DB!
+
+Khi chạy `python etl_pipeline.py run --run-id inject-bad --no-refund-fix --skip-validate`:
+```
+expectation[refund_no_stale_14d_window] FAIL (halt) :: violations=1
+WARN: expectation failed but --skip-validate -> continuing embed (only for Sprint 3 demo).
+```
+Expectation E3 phát hiện 1 chunk refund còn chứa "14 ngày làm việc". Nếu không có `--skip-validate`, pipeline sẽ HALT — bảo vệ ChromaDB khỏi dữ liệu sai.
 
 ---
 
-## 3. Before / after ảnh hưởng retrieval hoặc agent
+## 3. Before / after ảnh hưởng retrieval hoặc agent (200–250 từ)
 
-**Kịch bản inject (Sprint 3):**
-Nhóm đã cố ý tắt mất luật fix Refund Policy 14 ngày (Flag `--no-refund-fix` và `--skip-validate`). Lúc này, tài liệu cũ với cú pháp "Yêu cầu hoàn tiền trong 14 ngày làm việc" bị trộn vào ChromaDB thay vì được fix về 7 ngày.
+> Bắt buộc: inject corruption (Sprint 3) — mô tả + dẫn `artifacts/eval/…`
+
+**Kịch bản inject:**
+
+Nhóm cố ý tắt rule fix refund 14→7 ngày bằng flag `--no-refund-fix` và bỏ qua halt bằng `--skip-validate`. Lệnh: `python etl_pipeline.py run --run-id inject-bad --no-refund-fix --skip-validate`. Dữ liệu bẩn (chunk chứa "14 ngày làm việc") được embed trực tiếp vào ChromaDB.
 
 **Kết quả định lượng (từ CSV):**
 
-🔹 *Trước khi Fix (Dữ liệu bẩn `eval_bad.csv`):*
-```csv
-q_refund_window, Khách hàng có bao nhiêu ngày để yêu cầu hoàn tiền?, Yêu cầu được gửi trong vòng 7 ngày (và 14 ngày), hits_forbidden=yes
-```
-➡️ Retrieval Engine tìm trúng câu trả lời *chứa từ khóa "14 ngày làm việc"*. Điều này khiến AI Agent tư vấn sai cho khách hàng về quyền lợi trả hàng (Sự cố pháp lý / tài chính nghiêm trọng xảy ra).
+| Câu hỏi | Metric | eval_bad.csv (inject-bad) | eval_clean.csv (sprint4-final) |
+|----------|--------|:---:|:---:|
+| q_refund_window | contains_expected | yes | yes |
+| q_refund_window | **hits_forbidden** | **yes** ❌ | **no** ✅ |
+| q_p1_sla | contains_expected | yes | yes |
+| q_lockout | contains_expected | yes | yes |
+| q_leave_version | contains_expected | yes | yes |
+| q_leave_version | top1_doc_expected | yes | yes |
 
-🔹 *Sau chạy Clean Run (Dữ liệu sạch `eval_clean.csv`):*
-```csv
-q_refund_window, Khách hàng có bao nhiêu ngày để yêu cầu hoàn tiền?, Yêu cầu được gửi trong vòng 7 ngày làm việc..., hits_forbidden=no
-```
-➡️ Lệnh `expectation[refund_no_stale_14d_window] OK (halt)` xuất hiện! Khách hàng được AI Agent trả lời chính xác, tránh tổn thất lớn.
+**Phân tích:** Khi inject dữ liệu bẩn, câu `q_refund_window` vẫn tìm thấy từ khóa đúng ("7 ngày") NHƯNG đồng thời cũng hit forbidden keyword ("14 ngày làm việc") → `hits_forbidden=yes`. Agent sẽ nhận được thông tin mâu thuẫn: vừa nói 7 ngày vừa nói 14 ngày. Sau khi chạy clean pipeline (`sprint4-final`), `hits_forbidden=no` — Agent nhận thông tin thuần nhất.
+
+**Grading run cuối cùng** (`artifacts/eval/grading_run.jsonl`, `run_id=sprint4-final`):
+
+| Câu hỏi | contains_expected | hits_forbidden | top1_doc_matches |
+|----------|:-:|:-:|:-:|
+| q_refund_window | ✅ true | ✅ false | ✅ true |
+| q_p1_sla | ✅ true | ✅ false | ✅ true |
+| q_lockout | ✅ true | ✅ false | ✅ true |
+| q_leave_version | ✅ true | ✅ false | ✅ true |
+
+**4/4 câu PASS** — pipeline clean bảo vệ thành công dữ liệu cho AI Agent.
+
+**Đường dẫn artifact:**
+- `artifacts/eval/eval_bad.csv` — eval trên dữ liệu inject
+- `artifacts/eval/eval_clean.csv` — eval trên dữ liệu sạch
+- `artifacts/eval/grading_run.jsonl` — kết quả grading cuối
 
 ---
 
-## 4. Freshness & monitoring
+## 4. Freshness & monitoring (100–150 từ)
 
-Module `monitoring/freshness_check.py` phân tích JSON manifest. SLA freshness thiết lập mặc định ở ngưỡng `24.0 giờ`.
-Trong thực tập lab, do timestamp ghi trong manifest mồi là `2026-04-10T08:00:00`, nhưng thời gian hiện tại là 15/04/2026 (cách 120 giờ) > 24 giờ, nên trạng thái manifest bị flag đỏ là:
-`freshness_check=FAIL {"latest_exported_at": "2026-04-10T08:00:00", "age_hours": 120.239, "sla_hours": 24.0, "reason": "freshness_sla_exceeded"}` 
-Nếu hệ thống đi vào vận hành thực tế, luồng cronjob sẽ đảm bảo age_hours này quanh quẩn ở mức 0-2 (khi job chạy mỗi 2 giờ).
+Module `monitoring/freshness_check.py` đọc manifest JSON và so sánh `latest_exported_at` với thời gian hiện tại. SLA mặc định: **24 giờ**.
+
+Kết quả chạy trên manifest `sprint4-final`:
+```
+freshness_check=FAIL {
+  "latest_exported_at": "2026-04-10T08:00:00",
+  "age_hours": 120.239,
+  "sla_hours": 24.0,
+  "reason": "freshness_sla_exceeded"
+}
+```
+
+Dữ liệu export từ ngày 10/04, kiểm tra ngày 15/04 → cách 120 giờ > SLA 24 giờ → **FAIL**. Trong production, cronjob chạy pipeline mỗi 2–4 giờ sẽ giữ `age_hours` dưới ngưỡng SLA. Trạng thái PASS/WARN/FAIL cho phép team ops thiết lập alert (Slack/email) khi freshness vượt ngưỡng.
 
 ---
 
-## 5. Liên hệ Day 09
+## 5. Liên hệ Day 09 (50–100 từ)
 
-Dữ liệu sau embed được insert vào trực tiếp `ChromaDB` qua `collection=day10_kb`. Data Source này không bị rời rạc mà chính là "tim đập" nuôi các Agent (Retrieval Worker / Synthesis Worker) của bài Lab Day 09.
-Pipeline ETL này bảo vệ tính nguyên vẹn cho Agent. Dữ liệu từ API của công ty sẽ được "Lọc → Rửa (Clean) → Check Nhãn Cấm (Expectation) → Vectorize". Ai đó chèn rác trên CSDL nguồn sẽ bị pipeline chặn lại không cho lọt xuống RAG Multi-Agent.
+Dữ liệu sau embed nằm trong ChromaDB collection `day10_kb`. Collection này chính là Knowledge Base phục vụ cho Retrieval Worker và Synthesis Worker trong kiến trúc multi-agent Day 09. Pipeline ETL Day 10 đóng vai trò "upstream guardian": mọi dữ liệu từ hệ thống nguồn phải qua Clean → Validate → Embed trước khi Agent truy vấn. Nếu dữ liệu bẩn lọt qua, toàn bộ chuỗi Agent phía sau sẽ trả lời sai — đây là bài học cốt lõi "Garbage In, Garbage Out".
 
 ---
 
 ## 6. Rủi ro còn lại & việc chưa làm
-- Expectation Pydantic: Script vẫn dùng code chay cơ bản để filter. Lý tưởng nên dùng Great Expectations thư viện chuẩn hoặc Pandera.
-- Versioning VectorDB chưa mạnh tay: Khi Upsert theo `chunk_id`, nếu chunk nguồn bị delete thì ta chỉ đang prune rất thủ công, dễ gây dính vector ma trong kiến trúc HA lớn.
+
+- **Freshness SLA**: Dữ liệu lab mẫu cách 120 giờ → luôn FAIL. Production cần cronjob tự động refresh.
+- **Versioning VectorDB**: Upsert + prune thủ công. Cần snapshot/rollback mechanism cho collection Chroma.
+- **Expectation framework**: Dùng code Python thuần. Nên chuyển sang Great Expectations hoặc Pandera cho reporting HTML.
+- **Access control SOP**: Câu grading bonus (`q_access_control`) chưa match — cần bổ sung thêm canonical doc.
