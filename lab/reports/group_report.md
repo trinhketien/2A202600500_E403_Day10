@@ -99,19 +99,18 @@ Nhóm cố ý tắt rule fix refund 14→7 ngày bằng flag `--no-refund-fix` v
 
 **Grading run cuối cùng** (`artifacts/eval/grading_run.jsonl`, `run_id=sprint4-final`):
 
-| Câu hỏi | contains_expected | hits_forbidden | top1_doc_matches |
-|----------|:-:|:-:|:-:|
-| q_refund_window | ✅ true | ✅ false | ✅ true |
-| q_p1_sla | ✅ true | ✅ false | ✅ true |
-| q_lockout | ✅ true | ✅ false | ✅ true |
-| q_leave_version | ✅ true | ✅ false | ✅ true |
+| ID chính thức | Câu hỏi | contains_expected | hits_forbidden | top1_doc_matches | Điểm (SCORING.md) |
+|---------------|---------|:-:|:-:|:-:|:---:|
+| `gq_d10_01` | Hoàn tiền bao nhiêu ngày? | ✅ true | ✅ false | ✅ true | 4đ (Pass) |
+| `gq_d10_02` | SLA P1 bao lâu? | ✅ true | — | ✅ true | 3đ (Pass) |
+| `gq_d10_03` | Phép năm 2026 bao nhiêu ngày? | ✅ true | ✅ false | ✅ true | 3đ (Merit) |
 
-**4/4 câu PASS** — pipeline clean bảo vệ thành công dữ liệu cho AI Agent.
+**3/3 câu PASS** — đạt hạng **MERIT**. Pipeline clean bảo vệ thành công dữ liệu cho AI Agent.
 
 **Đường dẫn artifact:**
 - `artifacts/eval/eval_bad.csv` — eval trên dữ liệu inject
 - `artifacts/eval/eval_clean.csv` — eval trên dữ liệu sạch
-- `artifacts/eval/grading_run.jsonl` — kết quả grading cuối
+- `artifacts/eval/grading_run.jsonl` — kết quả grading chính thức (3 dòng `gq_d10_01..03`)
 
 ---
 
@@ -141,7 +140,7 @@ Dữ liệu sau embed nằm trong ChromaDB collection `day10_kb`. Collection nà
 
 ## 6. Rủi ro còn lại & việc chưa làm
 
-- **Freshness SLA**: Dữ liệu lab mẫu cách 120 giờ → luôn FAIL. Production cần cronjob tự động refresh.
+- **Freshness SLA**: Dữ liệu lab mẫu cách 120 giờ -> luôn FAIL. Production cần cronjob tự động refresh.
 - **Versioning VectorDB**: Upsert + prune thủ công. Cần snapshot/rollback mechanism cho collection Chroma.
 - **Expectation framework**: Dùng code Python thuần. Nên chuyển sang Great Expectations hoặc Pandera cho reporting HTML.
-- **Access control SOP**: Câu grading bonus (`q_access_control`) chưa match — cần bổ sung thêm canonical doc.
+- **Distinction target**: Chưa đạt 2 boundary freshness (ingest + publish) và chưa tích hợp GE/Pydantic thật.
