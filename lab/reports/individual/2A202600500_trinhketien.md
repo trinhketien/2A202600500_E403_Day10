@@ -19,7 +19,7 @@
 - `etl_pipeline.py`: Tôi chạy pipeline end-to-end với 3 run_id khác nhau (`sprint1-clean`, `inject-bad`, `sprint4-final`). Fix lỗi UnicodeEncodeError tại dòng 91 (console cp1258 không encode được ký tự tiếng Việt).
 - `transform/cleaning_rules.py`: Thêm 3 quy tắc mới R7 (strip BOM/control chars), R8 (min chunk length 20), R9 (reject missing exported_at).
 - `quality/expectations.py`: Thêm 2 expectations mới E7 (`no_bom_control_in_chunk_text`, halt) và E8 (`all_rows_have_exported_at`, warn).
-- `data/grading_questions.json`: Tạo bộ câu hỏi grading 5 câu để chạy `grading_run.py`.
+- `data/grading_questions.json`: Tạo bộ câu hỏi grading 3 câu (`gq_d10_01`, `gq_d10_02`, `gq_d10_03`) theo đúng rubric SCORING.md để chạy `grading_run.py`.
 
 **Kết nối với thành viên khác:**
 
@@ -27,7 +27,7 @@ Tôi build baseline pipeline vững, tạo `run_id=sprint1-clean` (10 raw → 6 
 
 **Bằng chứng (commit / comment trong code):**
 
-Commit `1ca083c` trên GitHub: `feat: add grading_questions.json and grading_run results - 4/4 PASS`
+Commit `2209980` trên GitHub: `docs: update all reports + docs + grading with official gq_d10_01-03 IDs (3/3 PASS MERIT)`
 
 ---
 
@@ -85,7 +85,7 @@ q_refund_window,...,contains_expected=yes,hits_forbidden=no
 ```
 → Agent chỉ nhận "7 ngày làm việc". `hits_forbidden=no` — không còn thông tin sai lệch.
 
-**Grading cuối** (`artifacts/eval/grading_run.jsonl`): **4/4 câu PASS** — `contains_expected=true`, `hits_forbidden=false`, `top1_doc_matches=true` trên tất cả câu hỏi chính.
+**Grading cuối** (`artifacts/eval/grading_run.jsonl`): **3/3 câu PASS** (`gq_d10_01`, `gq_d10_02`, `gq_d10_03`) — `contains_expected=true`, `hits_forbidden=false`, `top1_doc_matches=true` → đạt hạng **MERIT**.
 
 ---
 
